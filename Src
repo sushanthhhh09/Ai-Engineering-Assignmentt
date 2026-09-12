@@ -1,0 +1,78 @@
+\# Architecture Document: GraphOne / Frontier AI Data Pipeline
+
+
+
+\## PAGE 1: System Overview \& Architecture
+
+\### 1.1 High-Level Design
+
+The pipeline is built on a decoupled, asynchronous architecture designed to ingest, process, and enrich AI ecosystem data. The workflow progresses linearly through discrete phases: Data Acquisition -> Enrichment -> Extraction -> Entity Resolution -> Validation.
+
+
+
+\### 1.2 Component Interaction
+
+\* Sources: APIs (StartupDB, ZOIPI, arXiv, GitHub, Ashby) and feeds (News).
+
+\* Async Adapters: aiohttp and requests gather data concurrently.
+
+\* Storage: Data is stored as raw CSVs before downstream processing to prevent data loss.
+
+
+
+\---
+
+
+
+\## PAGE 2: LLM Orchestration, Entity Resolution, \& Data Quality
+
+\### 2.1 Multi-Tier LLM Orchestration
+
+\* Primary Engine: Gemini (gemini-3.6-flash).
+
+\* Fallback Concept: Groq Llama -> DeepSeek (architected but currently dormant to ensure tested reliability).
+
+\* Execution: Uses Pydantic for structured JSON output. Implements intelligent chunking (starting at 5000 chars, reducing to 500 on 413 Payload Errors) to prevent data truncation.
+
+
+
+\### 2.2 Deterministic Entity Resolution
+
+\* Cleanses the startup `name` field using strict deterministic rules: Unicode normalization, lowercase conversion, punctuation stripping, suffix removal (Inc, LLC, Corp), and canonical formatting.
+
+
+
+\### 2.3 Data Quality \& No-Hallucination
+
+\* Strict adherence to source truth. Missing publication dates (e.g., in jobs/news) are dropped rather than faked. LLM system instructions strictly forbid hallucinated entities.
+
+
+
+\---
+
+
+
+\## PAGE 3: Scaling, Anti-Bot, \& Fault Tolerance
+
+\### 3.1 Scaling to 500,000+ Records
+
+\* Horizontal Scaling: The decoupled architecture supports independent worker pools for each crawler.
+
+\* Async I/O: Non-blocking execution prevents freezing during massive network requests.
+
+\* Task Queues: The codebase is structured so crawlers can be easily dropped into Celery/Redis queues without changing core application logic.
+
+
+
+\### 3.2 Anti-Bot Strategy
+
+\* Exclusively uses official APIs, RSS feeds, or permitted endpoints.
+
+\* Adheres strictly to security rules: no bypassing of CAPTCHAs, Cloudflare, or DataDome.
+
+
+
+\### 3.3 Fault Tolerance (Retry Logic)
+
+\* LLM and HTTP calls implement exponential backoff with jitter for HTTP 408, 429, 500, 502, 503, and 504 errors, ensuring resilience against rate limits and server timeouts.
+
