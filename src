@@ -1,0 +1,66 @@
+import csv
+import os
+import re
+import unicodedata
+
+def normalize_entity_name(raw_name):
+    if not raw_name:
+        return ""
+    
+    # Unicode normalization
+    name = unicodedata.normalize('NFKD', raw_name).encode('ASCII', 'ignore').decode('utf-8')
+    
+    # Lowercase conversion
+    name = name.lower()
+    
+    # Common company-suffix removal
+    suffixes = [r'\binc\b', r'\bllc\b', r'\bcorp\b', r'\bcorporation\b', r'\bltd\b', r'\blimited\b', r'\bco\b', r'\bcompany\b']
+    for suffix in suffixes:
+        name = re.sub(suffix, '', name)
+        
+    # Punctuation removal
+    name = re.sub(r'[^\w\s]', '', name)
+    
+    # Whitespace normalization
+    name = ' '.join(name.split())
+    
+    # Canonical title formatting
+    return name.title()
+
+def main():
+    input_file = os.path.join('data', 'startups.csv')
+    output_file = os.path.join('data', 'entity_mapping_log.csv')
+
+    if not os.path.exists(input_file):
+        print(f"Error: {input_file} not found.")
+        return
+
+    print(f"Reading startups from {input_file}...")
+
+    mapping_log = []
+    with open(input_file, mode='r', encoding='utf-8') as infile:
+        reader = csv.DictReader(infile)
+        for row in reader:
+            # Explicitly use the correct 'name' field
+            raw_name = row.get("name", "").strip()
+            if raw_name:
+                canonical_name = normalize_entity_name(raw_name)
+                mapping_log.append({
+                    "raw_name": raw_name,
+                    "canonical_name": canonical_name,
+                    "resolution_method": "deterministic_normalization"
+                })
+
+    print(f"Writing {len(mapping_log)} records to {output_file}...")
+    with open(output_file, mode='w', encoding='utf-8', newline='') as outfile:
+        fieldnames = ["raw_name", "canonical_name", "resolution_method"]
+        writer = csv.DictWriter(outfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(mapping_log)
+
+    print("\n--- Verification: First 5 Entity Mappings ---")
+    for i in range(min(5, len(mapping_log))):
+        print(f"Raw: '{mapping_log[i]['raw_name']}' -> Canonical: '{mapping_log[i]['canonical_name']}'")
+
+if __name__ == "__main__":
+    main()
